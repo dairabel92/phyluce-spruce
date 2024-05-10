@@ -334,6 +334,7 @@ def main():
             rsf = defaultdict(list)
             rsn = defaultdict(list)
             cbp = defaultdict(list)
+            ruce = defaultdict(list)
         else:
             raise ValueError("Only 'stack' and 'concat' are available for 'method'.")
         rcf = dict()
@@ -387,6 +388,7 @@ def main():
                         rsf[poscen].append(fij)
                         cbp[poscen].append(bsp)
                         rsn[poscen].append(n)
+                        ruce[poscen].append(locus)
                     else:
                         raise ValueError(
                             "Only 'stack' and 'concat' are available for 'method'."
@@ -407,7 +409,7 @@ def main():
             outf.write("distance_from_center,freq,bp,n\n")
             for k in rsf.keys():
                 for i in range(len(rsf[k])):
-                    outf.write("%s,%s,%s,%s\n" % (k, rsf[k][i], cbp[k][i], rsn[k][i]))
+                    outf.write("%s,%s,%s,%s,%s\n" % (ruce[k][i], k, rsf[k][i], cbp[k][i], rsn[k][i]))
             outf.close()
         else:
             raise ValueError("Only 'stack' and 'concat' are available for 'method'.")
