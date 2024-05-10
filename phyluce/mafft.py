@@ -44,6 +44,8 @@ class Align(GenericAlign):
             "--adjustdirection",
             "--maxiterate",
             "1000",
+            '--ep', '0.123',
+            '--localpair',
             self.input,
         ]
         # just pass all ENV params

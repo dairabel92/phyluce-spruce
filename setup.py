@@ -19,6 +19,7 @@ for d in [
     "probes",
     "utilities",
     "workflow",
+    "spruce"
 ]:
     scrpt.extend([i for i in glob.glob(os.path.join("bin", d, "*"))])
 
