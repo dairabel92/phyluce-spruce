@@ -9,8 +9,8 @@ This code is distributed under a 3-clause BSD license. Please see
 LICENSE.txt for more information.
 
 Created on 07 August 2012 21:08 PDT (-0700)
+Edited for SPrUCE 2024 Daira Melendez
 """
-
 
 import os
 import re
@@ -42,6 +42,8 @@ import pdb
 import numpy as np
 from scipy.optimize import minimize
 from scipy.optimize import Bounds
+from scipy.interpolate import UnivariateSpline
+import pandas as pd
 
 
 def get_args():
@@ -60,6 +62,12 @@ def get_args():
         required=True,
         action=FullPaths,
         help="""The name of the CSV file of substitutions to plot as a smilogram using new equation.""",
+    )
+    parser.add_argument(
+        "--center-file",
+        required=False,
+        action=FullPaths,
+        help="""""",
     )
     parser.add_argument(
         "--input-format",
@@ -182,9 +190,12 @@ def worker(work):
     # we assume internal gaps are "real" whereas end gaps usually
     # represent missing data.
     aln = replace_gaps(aln)
+
+    positions_with_multiple_alleles = []  # New list to store positions with >2 alleles
+
     for idx in range(aln.get_alignment_length()):
         col = aln[:, idx]
-        col=col.lower()
+        col = col.lower()
         # strip the "n" or "N"
         bases = re.sub("N|n|\\?", "", col)
         # count total number of sites considered
@@ -199,6 +210,11 @@ def worker(work):
         else:
             # count all the bases in a column
             count = Counter(bases)
+            # Check for positions with more than two alleles
+            if len(count) > 2:
+                positions_with_multiple_alleles.append(idx)
+                continue
+
             # get major allele if possible
             count_of_count = Counter(list(count.values()))
             # we can't have a tie
@@ -246,6 +262,36 @@ def worker(work):
     sys.stdout.write(".")
     sys.stdout.flush()
     return (locus, results, aln.get_alignment_length(), base_count)
+
+
+def calculate_threshold(uce_data):
+    # Calculate ECDF
+    Fn = uce_data["bp"].rank(method="first") / len(uce_data)
+    out = pd.DataFrame(
+        {"bp": np.log2(uce_data["bp"].values), "cdf": np.log2(Fn.values + 1)}
+    )
+
+    # Sort the values to ensure they are strictly increasing
+    out = out.sort_values(by="bp").reset_index(drop=True)
+
+    # Remove duplicates to ensure strict monotonicity
+    out = out.loc[out["bp"].diff() != 0]
+
+    # Smooth the ECDF using cubic spline interpolation
+    spline = UnivariateSpline(out["bp"], out["cdf"], s=0, k=3)
+    s_bp = np.linspace(min(out["bp"]), max(out["bp"]), num=len(out))
+    s_cdf = spline(s_bp)
+
+    # Create the output DataFrame
+    out["s_bp"] = s_bp
+    out["s_cdf"] = s_cdf
+
+    # Calculate second derivative and find the threshold
+    out["s_grad"] = np.gradient(np.gradient(out["s_cdf"]))
+    out["c"] = out["s_grad"] < 10**-4
+
+    threshold = 2 ** np.max(out["s_bp"][out["s_grad"] < 0])
+    return threshold
 
 
 def estimate_theta(positions, frequencies, ns, bps, args):
@@ -339,9 +385,22 @@ def main():
             raise ValueError("Only 'stack' and 'concat' are available for 'method'.")
         rcf = dict()
 
+        centers = {}
+        if args.center_file:
+            with open(args.center_file) as f:
+                lines = f.readlines()
+                for line in lines:
+                    try:
+                        uce_id, uce_n, uce_center, center_pos = line.split(",")
+                        centers[uce_id] = int(center_pos.strip())
+                    except Exception as e:
+                        pass
+
         for locus, result, length, bases in results:
             # get approximate center of alignment
-            center = length // 2
+            center = centers.get(locus, length // 2)
+            if abs(center - length // 2) > 50:
+                center = length // 2
             # fill locus table
             # we also want a locus specific list of all variable positions
             # NOTE: currently only doing this for substitutions
@@ -376,8 +435,6 @@ def main():
                             / (n)
                             / (n - 1.0)
                         )
-                        if fij < 0:
-                            print(n,substitutions, bsp, insertions, deletions, missing)
                         rsf[poscen] = 0.0 + rsf.get(poscen, 0) + fij
                         cbp[poscen] = cbp.get(poscen, 0) + bsp
                         rsn[poscen] = rsn.get(poscen, 0) + n
@@ -409,7 +466,10 @@ def main():
             outf.write("distance_from_center,freq,bp,n\n")
             for k in rsf.keys():
                 for i in range(len(rsf[k])):
-                    outf.write("%s,%s,%s,%s,%s\n" % (ruce[k][i], k, rsf[k][i], cbp[k][i], rsn[k][i]))
+                    outf.write(
+                        "%s,%s,%s,%s,%s\n"
+                        % (ruce[k][i], k, rsf[k][i], cbp[k][i], rsn[k][i])
+                    )
             outf.close()
         else:
             raise ValueError("Only 'stack' and 'concat' are available for 'method'.")
@@ -434,6 +494,12 @@ def main():
                 rsn[r[0]].append(float(r[3]))
         else:
             raise ValueError("Only 'stack' and 'concat' are available for 'method'.")
+
+    if args.method == "stack" and args.min_bases == 0:
+        uce_data_df = pd.DataFrame({"bp": cbp.values()})
+        threshold = calculate_threshold(uce_data_df)
+        print("Calculated threshold for min-base: {}".format(threshold))
+        args.min_bases = threshold
 
     res = estimate_theta(
         rsf.keys(), rsf.values(), rsn.values(), [cbp[k] for k in rsf.keys()], args
