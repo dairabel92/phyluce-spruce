@@ -9,7 +9,7 @@ This code is distributed under a 3-clause BSD license. Please see
 LICENSE.txt for more information.
 
 Created on 07 August 2012 21:08 PDT (-0700)
-Edited for SPrUCE 2024 Daira Melendez, Ali Osman Berk Sapci
+Edited for SPrUCE 2024 Daira Melendez
 """
 
 import os
@@ -400,7 +400,7 @@ def main():
             # get approximate center of alignment
             center = centers.get(locus, length // 2)
             if abs(center - length // 2) > 50:
-                center = length // 2
+                continue
             # fill locus table
             # we also want a locus specific list of all variable positions
             # NOTE: currently only doing this for substitutions
