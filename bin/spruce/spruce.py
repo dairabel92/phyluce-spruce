@@ -9,7 +9,7 @@ This code is distributed under a 3-clause BSD license. Please see
 LICENSE.txt for more information.
 
 Created on 07 August 2012 21:08 PDT (-0700)
-Edited for SPrUCE 2024 Daira Melendez
+Edited for SPrUCE 2024 Daira Melendez, Ali Osman Berk Sapci
 """
 
 import os
