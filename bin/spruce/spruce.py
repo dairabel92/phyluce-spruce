@@ -288,7 +288,7 @@ def calculate_threshold(uce_data):
 
     # Calculate second derivative and find the threshold
     out["s_grad"] = np.gradient(np.gradient(out["s_cdf"]))
-    out["c"] = out["s_grad"] < 10**-4
+    out["c"] = out["s_grad"] < 10**-5
 
     threshold = 2 ** np.max(out["s_bp"][out["s_grad"] < 0])
     return threshold
@@ -336,8 +336,8 @@ def estimate_theta(positions, frequencies, ns, bps, args):
             for (p, f_list, n_list, bp_list) in zip(positions, frequencies, ns, bps)
         )
 
-    x0 = [0.005, 10, 0.02]
-    bounds = Bounds([0, 0.0001, 0.000000001], [0.2, 200, 100])
+    x0 = [0.001, 10, 0.02]
+    bounds = Bounds([0, 0.001, 0.0005], [0.2, 100, 10])
 
     if args.method == "stack":
         if args.use_weights:
