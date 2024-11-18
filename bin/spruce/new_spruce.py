@@ -430,9 +430,7 @@ def main():
                 n = bsp - insertions - deletions - missing
                 if ((n) > 1) and (abs(poscen) < args.flank):
                     if args.method == "stack":
-                        fij = (
-                            2.0
-                            * (substitutions)
+                        fij = ((substitutions)
                             * (n - substitutions)
                             / (n)
                             / (n - 1.0)
@@ -441,8 +439,7 @@ def main():
                         cbp[poscen] = cbp.get(poscen, 0) + bsp
                         rsn[poscen] = rsn.get(poscen, 0) + n
                     elif args.method == "concat":
-                        fij = (
-                            2 * (substitutions) * (n - substitutions) / (n) / (n - 1.0)
+                        fij = ((substitutions) * (n - substitutions) / (n) / (n - 1.0)
                         )
                         rsf[poscen].append(fij)
                         cbp[poscen].append(bsp)
