@@ -16,7 +16,6 @@ import os
 import re
 import sys
 import math
-import time
 import glob
 import sqlite3
 import argparse
@@ -311,12 +310,9 @@ def estimate_theta(positions, frequencies, ns, bps, args):
     def minimize_function_wconcat(parameters):
         x, b, c = parameters
         return sum(
-            sum(
-                (n - 1) / (n + 1) * (f - gompertz2(p, x, b, c)) ** 2
-                for f, n, bp in zip(f_list, n_list, bp_list)
-                if bp > args.min_bases
-            )
-            for (p, f_list, n_list, bp_list) in zip(positions, frequencies, ns, bps)
+            (n - 1) / (n + 1) * (f - gompertz2(p, x, b, c)) ** 2
+            for p in positions
+            for f, n, bp in zip(frequencies[p], ns[p], bps[p])
         )
 
     def minimize_function_stack(parameters):
@@ -330,43 +326,36 @@ def estimate_theta(positions, frequencies, ns, bps, args):
     def minimize_function_concat(parameters):
         x, b, c = parameters
         return sum(
-            sum(
-                (f - gompertz2(p, x, b, c)) ** 2
-                for f, n, bp in zip(f_list, n_list, bp_list)
-                if bp > args.min_bases
-            )
-            for (p, f_list, n_list, bp_list) in zip(positions, frequencies, ns, bps)
+            (f - gompertz2(p, x, b, c)) ** 2
+            for p in positions
+            for f, _, bp in zip(frequencies[p], ns[p], bps[p])
         )
 
     # max position where bp >= threshold
     if args.method == "stack":
         m = max([p for p, bp in zip(positions, bps) if bp >= args.min_bases], default=1)
-    elif args.method == "concat":
-    # For concat, just ensure there's at least one base (no thresholding needed)
-        m = max([p for p, bp in zip(positions, bps) if len(bps) > 0], default=1)
+    else:  # concat mode
+        m = max(abs(p) for p in positions)
 
-    # fprime similar to flank
-    fprime = min(m, args.flank) #ensure its bigger than 1
-    if args.flank == math.inf:
-        args.flank = fprime
-    print(f"Calculated fprime: {fprime}")
+    # fprime  similar to flank
+    fprime = min(m, args.flank)
 
-    #lower bound for c
+    #my lower bound for c
     lower_c = (np.log(10) - np.log(np.log(5 / 4))) / fprime
 
     x0 = [0.001, 10, 0.02]
-    bounds = Bounds([0, 0.001, lower_c], [0.4, 100, 5])
-   
+    bounds = Bounds([0, 0.001, lower_c], [0.2, 100, 10])
+
     if args.method == "stack":
         if args.use_weights:
-            return minimize(minimize_function_wstack, x0, bounds=bounds, method = 'trust-constr')
+            return minimize(minimize_function_wstack, x0, bounds=bounds)
         else:
-            return minimize(minimize_function_stack, x0, bounds=bounds, method = 'trust-constr')
+            return minimize(minimize_function_stack, x0, bounds=bounds)
     elif args.method == "concat":
         if args.use_weights:
-            return minimize(minimize_function_wconcat, x0, bounds=bounds, method = 'trust-constr')
+            return minimize(minimize_function_wconcat, x0, bounds=bounds)
         else:
-            return minimize(minimize_function_concat, x0, bounds=bounds, method = 'trust-constr')
+            return minimize(minimize_function_concat, x0, bounds=bounds)
     else:
         raise ValueError("Only 'stack' and 'concat' are available for 'method'.")
 
@@ -521,24 +510,16 @@ def main():
         uce_data_df = pd.DataFrame({"bp": cbp.values()})
         threshold = calculate_threshold(uce_data_df)
         if abs(threshold - uce_data_df["bp"].mean()) > (uce_data_df["bp"].std()*2) or (threshold > uce_data_df["bp"].mean()):
-            threshold = len(locus_set) * 2
+            threshold = len(locus_set)
         print("Calculated threshold for min-base: {}".format(threshold))
-        args.min_bases = threshold
-    elif args.method == "concat":
-        args.min_base = 1
 
-    start_time = time.time()
+        args.min_bases = threshold
 
     res = estimate_theta(
         rsf.keys(), rsf.values(), rsn.values(), [cbp[k] for k in rsf.keys()], args
     )
-
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-
     print("The estimated theta is: " + str(res.x[0]))
     print("All Gompertz parameters are: " + str(res.x))
-    print(f"Output time: {elapsed_time:.2f} seconds") #yay print out elapsed time
 
 
 if __name__ == "__main__":

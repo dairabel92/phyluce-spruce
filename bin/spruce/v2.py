@@ -1,4 +1,4 @@
-#!/calab_data/mirarab/home/dairabel/anaconda3/envs/phyluce-1.7.1/bin/python
+#!/tmp/enter/envs/phyluce-new/bin/python
 # -*- coding: utf-8 -*-
 
 """
@@ -16,14 +16,12 @@ import os
 import re
 import sys
 import math
-import time
 import glob
 import sqlite3
 import argparse
 import multiprocessing
 from collections import Counter, defaultdict
 from random import choice
-import statistics
 
 from Bio import AlignIO
 from Bio.Seq import Seq
@@ -338,35 +336,19 @@ def estimate_theta(positions, frequencies, ns, bps, args):
             for (p, f_list, n_list, bp_list) in zip(positions, frequencies, ns, bps)
         )
 
-    # max position where bp >= threshold
-    if args.method == "stack":
-        m = max([p for p, bp in zip(positions, bps) if bp >= args.min_bases], default=1)
-    elif args.method == "concat":
-    # For concat, just ensure there's at least one base (no thresholding needed)
-        m = max([p for p, bp in zip(positions, bps) if len(bps) > 0], default=1)
-
-    # fprime similar to flank
-    fprime = min(m, args.flank) #ensure its bigger than 1
-    if args.flank == math.inf:
-        args.flank = fprime
-    print(f"Calculated fprime: {fprime}")
-
-    #lower bound for c
-    lower_c = (np.log(10) - np.log(np.log(5 / 4))) / fprime
-
     x0 = [0.001, 10, 0.02]
-    bounds = Bounds([0, 0.001, lower_c], [0.4, 100, 5])
-   
+    bounds = Bounds([0, 1, 0.0005], [0.2, 200, 10])
+
     if args.method == "stack":
         if args.use_weights:
-            return minimize(minimize_function_wstack, x0, bounds=bounds, method = 'trust-constr')
+            return minimize(minimize_function_wstack, x0, bounds=bounds)
         else:
-            return minimize(minimize_function_stack, x0, bounds=bounds, method = 'trust-constr')
+            return minimize(minimize_function_stack, x0, bounds=bounds)
     elif args.method == "concat":
         if args.use_weights:
-            return minimize(minimize_function_wconcat, x0, bounds=bounds, method = 'trust-constr')
+            return minimize(minimize_function_wconcat, x0, bounds=bounds)
         else:
-            return minimize(minimize_function_concat, x0, bounds=bounds, method = 'trust-constr')
+            return minimize(minimize_function_concat, x0, bounds=bounds)
     else:
         raise ValueError("Only 'stack' and 'concat' are available for 'method'.")
 
@@ -414,8 +396,8 @@ def main():
                     except Exception as e:
                         pass
 
-        #adding locus set for thresold
         locus_set = set()
+
         for locus, result, length, bases in results:
             # get approximate center of alignment
             center = centers.get(locus, length // 2)
@@ -448,20 +430,16 @@ def main():
                 n = bsp - insertions - deletions - missing
                 if ((n) > 1) and (abs(poscen) < args.flank):
                     if args.method == "stack":
-                        fij = (
-                            2.0
-                            * (substitutions)
+                        fij = ((substitutions)
                             * (n - substitutions)
                             / (n)
                             / (n - 1.0)
                         )
-                    
                         rsf[poscen] = 0.0 + rsf.get(poscen, 0) + fij
                         cbp[poscen] = cbp.get(poscen, 0) + bsp
                         rsn[poscen] = rsn.get(poscen, 0) + n
                     elif args.method == "concat":
-                        fij = (
-                            2 * (substitutions) * (n - substitutions) / (n) / (n - 1.0)
+                        fij = ((substitutions) * (n - substitutions) / (n) / (n - 1.0)
                         )
                         rsf[poscen].append(fij)
                         cbp[poscen].append(bsp)
@@ -478,8 +456,8 @@ def main():
             # Take averages
             for k, v in rsf.items():
                 rsf[k] = rsf[k] / rcf[k]
-            outf = open(args.output_file, "w")
-            outf.write("distance_from_center,freq,bp,n\n")
+                outf = open(args.output_file, "w")
+                outf.write("distance_from_center,freq,bp,n\n")
             for k in sorted(rsf.keys()):
                 outf.write("%s,%s,%s,%s\n" % (k, rsf[k], cbp[k], rsn[k]))
             outf.close()
@@ -521,24 +499,15 @@ def main():
         uce_data_df = pd.DataFrame({"bp": cbp.values()})
         threshold = calculate_threshold(uce_data_df)
         if abs(threshold - uce_data_df["bp"].mean()) > (uce_data_df["bp"].std()*2) or (threshold > uce_data_df["bp"].mean()):
-            threshold = len(locus_set) * 2
+            threshold = len(locus_set)
         print("Calculated threshold for min-base: {}".format(threshold))
         args.min_bases = threshold
-    elif args.method == "concat":
-        args.min_base = 1
-
-    start_time = time.time()
 
     res = estimate_theta(
         rsf.keys(), rsf.values(), rsn.values(), [cbp[k] for k in rsf.keys()], args
     )
-
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-
     print("The estimated theta is: " + str(res.x[0]))
     print("All Gompertz parameters are: " + str(res.x))
-    print(f"Output time: {elapsed_time:.2f} seconds") #yay print out elapsed time
 
 
 if __name__ == "__main__":
